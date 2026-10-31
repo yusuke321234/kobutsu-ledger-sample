@@ -15,7 +15,7 @@
     "devDependencies": {
         "@inertiajs/vite": "^3.7.1",
         "@laravel/vite-plugin-wayfinder": "^0.1.10",
-        "@playwright/test": "^1.61.1",
+        "@playwright/test": "^1.64.1",
         "@rolldown/plugin-babel": "^0.2.4",
         "@tailwindcss/vite": "^4.0.0",
         "@types/node": "^26.0.0",
