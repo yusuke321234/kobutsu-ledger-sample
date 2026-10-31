@@ -52,10 +52,31 @@ class SaleController extends Controller
         // execute
         $result = $this->saleService->register($userId, $registerData);
 
-        // return（粗利＝売価−仕入。仕入額が未入力なら粗利は出さない）
+        // return（売れない・売却済み・売却日が仕入日より前は、該当する入力欄のエラーとして元の画面へ戻す）
+        if ($result['status'] === 'ok') {
+            Log::info("売却を登録しました。");
+        } else if ($result['status'] === 'not_sellable') {
+            Log::info("売却できない仕入のため入力画面へ戻します。");
+
+            //
+            return back()->withErrors(['purchase_id' => 'この商品は売却できません（見つからないか、下書きのままです）。']);
+        } else if ($result['status'] === 'sold') {
+            Log::info("売却済みのため入力画面へ戻します。");
+
+            //
+            return back()->withErrors(['purchase_id' => 'この商品はすでに売却済みです（1つの仕入に対し売却は1件までです）。']);
+        } else {
+            Log::info("売却日が仕入日より前のため入力画面へ戻します。");
+
+            //
+            return back()->withErrors(['sale_date' => "売却日は仕入日（{$result['data']['transaction_date']}）より前にできません。"]);
+        }
+
+        // 粗利＝売価−仕入。仕入額が未入力なら粗利は出さない
+        $saleData = $result['data'];
         $message = '売却を記録しました。';
-        if ($result['raw_gross_profit'] !== null) {
-            $message .= '粗利 ¥' . number_format((int)$result['raw_gross_profit']);
+        if ($saleData['raw_gross_profit'] !== null) {
+            $message .= '粗利 ¥' . number_format((int)$saleData['raw_gross_profit']);
         } else {
             // no action.
         }
@@ -86,14 +107,19 @@ class SaleController extends Controller
         // execute
         $result = $this->saleService->update($userId, $id, $updateData);
 
-        // return（対象が無ければ404）
-        if ($result !== null) {
+        // return（対象が無ければ404、売却日が仕入日より前なら売却日の入力欄のエラー）
+        if ($result['status'] === 'ok') {
             Log::info("売却を更新しました。 sale_id: {$id}");
-        } else {
+        } else if ($result['status'] === 'not_found') {
             Log::info("更新対象が見つからないため404を返します。 sale_id: {$id}");
 
             //
             abort(404, '対象の売却が見つかりません。');
+        } else {
+            Log::info("売却日が仕入日より前のため入力画面へ戻します。 sale_id: {$id}");
+
+            //
+            return back()->withErrors(['sale_date' => "売却日は仕入日（{$result['data']['transaction_date']}）より前にできません。"]);
         }
 
         //

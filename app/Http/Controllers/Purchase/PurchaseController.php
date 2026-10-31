@@ -153,14 +153,24 @@ class PurchaseController extends Controller
         // execute
         $result = $this->purchaseService->update($userId, $id, $updateData);
 
-        // return（対象が無ければ404）
-        if ($result !== null) {
+        // return（対象が無ければ404、売却済みを下書きに戻そうとしたら403、仕入日が売却日より後なら仕入日の入力欄のエラー）
+        if ($result['status'] === 'ok') {
             Log::info("仕入を更新しました。 purchase_id: {$id}");
-        } else {
+        } else if ($result['status'] === 'not_found') {
             Log::info("更新対象が見つからないため404を返します。 purchase_id: {$id}");
 
             //
             abort(404, '対象の仕入が見つかりません。');
+        } else if ($result['status'] === 'sold') {
+            Log::info("売却済みを下書きに戻そうとしたため403を返します。 purchase_id: {$id}");
+
+            //
+            abort(403, '売却済みの仕入は下書きに戻せません。先に売却を取り消してください。');
+        } else {
+            Log::info("仕入日が売却日より後のため入力画面へ戻します。 purchase_id: {$id}");
+
+            //
+            return back()->withErrors(['transaction_date' => "売却済みのため、仕入日を売却日（{$result['data']['sale_date']}）より後にはできません。"]);
         }
 
         //

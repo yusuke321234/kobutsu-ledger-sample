@@ -31,7 +31,8 @@
     ```
 ・**Repository は言われたとおりに読み書きするだけで、新規か更新かも、どの項目を更新してよいかも決めない**（どちらも業務のルールなので Service で決める）。
     - 呼ぶ側で決まっている場面（`POST /sales` と `PUT /sales/{id}` のようにルートで分かれている）は、判別せずに `create` / `update` を呼ぶ
-    - データ次第で変わる場面（記録があれば更新、無ければ作成、のような処理）は、Service が `get…` で確かめてから `create` / `update` を呼び分ける。新規のときだけ別の処理をする、などの違いも Service に書く。仕入の削除で「売却済みなら削除しない」を、`PurchaseService::delete()` が `getData()` で確かめてから決めるのも同じ考え方
+    - データ次第で変わる場面（記録があれば更新、無ければ作成、のような処理）は、Service が `get…` で確かめてから `create` / `update` を呼び分ける。新規のときだけ別の処理をする、などの違いも Service に書く。仕入の削除で「売却済みなら削除しない」を、`PurchaseService::delete()` が `getDataForUpdate()` で確かめてから決めるのも同じ考え方
+    - **確かめてから書き込む処理は、`DB::transaction()` の中で、対象の行をロックして（`…ForUpdate()`）から確かめる。** 確かめたあと・書き込む前に、同時に来た別のリクエストに状態を変えられないようにするため（二重送信で売却が2件できる、など）。入力チェック（FormRequest の `Rule::unique` 等）は先に弾いて画面に理由を出すためのもので、最後の守りにはしない。トランザクションの境界は Service に置き、Repository は「ロックして取得する」メソッド（`PurchaseRepository::getDataForUpdate()`）を用意するだけにする
     - 更新する項目は、Controller が `validated()` から組み立てる配列で決まる（例：`updateName()` は `family_name` / `given_name` だけの `$nameData` を作る）。Service で同じ項目に絞り直さない（`Arr::only` は使わない）。画面から余計な項目を送られても、Controller が項目を決めて配列を作るので Repository まで届かない
 
 ## Controller
