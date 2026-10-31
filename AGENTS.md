@@ -76,7 +76,7 @@ npm run e2e                                               # 画面の E2E（buil
 ```
 
 - 自動修正：`npm run check:fix`（フロント）/ `vendor/bin/phpcbf`（PHP の見た目）
-- PHPStan の既存の型の指摘は `phpstan-baseline.neon` に記録して受け入れている（作り直しは `composer phpstan:baseline`）。自作ルールの違反はベースラインに入れずに直す
+- PHPStan のベースライン（`phpstan-baseline.neon`）は**0件**。新しい指摘はベースラインに入れずにコードを直す（ベースラインは、ライブラリの更新などで一度に多くの指摘が出たときに一時的に使うだけ。作り直しは `composer phpstan:baseline`）
 - CI（GitHub Actions）が push とプルリクエストのたびに、test ジョブ（整形・Lint・型・規約のチェック・PHPUnit）と e2e ジョブ（Playwright）を流す。E2E は CI でだけ、失敗したテストを1回やり直す
 - **push 前のフック**（`.githooks/pre-push`）：test ジョブと同じ解析とテスト（E2E を除く）を流し、落ちたら push を止める。有効にするには clone ごとに1回 `git config core.hooksPath .githooks`。今回だけ飛ばすなら `git push --no-verify`
 

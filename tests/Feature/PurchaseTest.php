@@ -32,7 +32,7 @@ class PurchaseTest extends TestCase
 
 
     /**
-     * 確定済みの正しい仕入ペイロード（画面と同じ camelCase。テストで一部を上書きして使う）
+     * 確定済みの正しい仕入ペイロード（画面が送るのと同じ snake_case。テストで一部を上書きして使う）
      *
      * @param array $override
      * @return array

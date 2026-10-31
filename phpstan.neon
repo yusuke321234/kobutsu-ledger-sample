@@ -1,6 +1,6 @@
 # PHP の型の解析（PHPStan + Larastan）と、規約の自作ルール。実行は composer phpstan。
-# 今あるコードへの型の指摘は phpstan-baseline.neon に記録して受け入れ、新しく書くコードから厳しく見る
-# （ベースラインを作り直すときは composer phpstan:baseline）。規約の自作ルールはベースラインに入れない。
+# ベースライン（phpstan-baseline.neon）は0件。指摘はベースラインに入れずにコードを直す。
+# ベースラインは、ライブラリの更新などで一度に多くの指摘が出たときに一時的に使うだけ（作り直しは composer phpstan:baseline）。
 includes:
     - vendor/larastan/larastan/extension.neon
     - phpstan-baseline.neon

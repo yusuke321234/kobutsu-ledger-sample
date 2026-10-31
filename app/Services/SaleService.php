@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Contracts\Repositories\SaleRepositoryInterface;
 use App\Contracts\Services\SaleServiceInterface;
-use Illuminate\Support\Carbon;
+use App\Support\DateText;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -77,7 +77,7 @@ class SaleService implements SaleServiceInterface
             }
 
             // 売却日は仕入日より前にできない
-            $transactionDate = $this->toDateString($purchaseData['transaction_date']);
+            $transactionDate = DateText::toDateString($purchaseData['transaction_date']);
             if (strcmp((string)$registerData['sale_date'], (string)$transactionDate) >= 0) {
                 // ok.
             } else {
@@ -129,7 +129,7 @@ class SaleService implements SaleServiceInterface
 
             // 売却日は仕入日より前にできない（仕入日の変更と同時に来ても食い違わないよう、仕入の行をロックしてから比べる）
             $purchaseData = $this->purchaseRepository->getDataForUpdate((string)$existing['purchase_id'], $userId);
-            $transactionDate = $this->toDateString($purchaseData['transaction_date'] ?? null);
+            $transactionDate = DateText::toDateString($purchaseData['transaction_date'] ?? null);
             if ($transactionDate === null || strcmp((string)$updateData['sale_date'], $transactionDate) >= 0) {
                 // ok.
             } else {
@@ -188,7 +188,7 @@ class SaleService implements SaleServiceInterface
         $result = [
             'id' => (string)$saleData['id'],
             'purchase_id' => (string)$saleData['purchase_id'],
-            'sale_date' => $this->toDateString($saleData['sale_date'] ?? null),
+            'sale_date' => DateText::toDateString($saleData['sale_date'] ?? null),
             'channel' => (string)$saleData['channel'],
             'sale_price' => (int)$saleData['sale_price'],
             'fee' => (int)$saleData['fee'],
@@ -221,26 +221,5 @@ class SaleService implements SaleServiceInterface
 
         //
         return $profit;
-    }
-
-
-
-    /**
-     * 日付文字列を 'Y-m-d' に整形する（null はそのまま null）
-     *
-     * @param string|null $value
-     * @return string|null
-     */
-    private function toDateString(?string $value): ?string
-    {
-        $result = null;
-        if ($value !== null) {
-            $result = Carbon::parse($value)->toDateString();
-        } else {
-            // no action.
-        }
-
-        //
-        return $result;
     }
 }

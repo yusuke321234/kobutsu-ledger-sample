@@ -13,7 +13,7 @@ use Symfony\Component\HttpFoundation\Response;
  *
  * FormRequest は失敗すると、エラーをセッションに載せて元の画面へリダイレクトする（Laravel 標準）。
  * その戻り（リダイレクト）を見て、ここで1回だけ記録する。
- * FormRequest 側には書かない（17個の FormRequest に同じコードを置かないため）。
+ * FormRequest 側には書かない（すべての FormRequest に同じコードを置かないため）。
  */
 class LogValidationError
 {
@@ -66,7 +66,7 @@ class LogValidationError
         //
         $errors = $request->session()->get('errors');
         if ($errors instanceof ViewErrorBag) {
-            return $errors->getBag('default')->messages();
+            return $errors->getBag('default')->getMessages();
         } else {
             return [];
         }

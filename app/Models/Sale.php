@@ -52,22 +52,4 @@ class Sale extends Model
     {
         return $this->belongsTo(Purchase::class);
     }
-
-
-
-    /**
-     * 粗利（売価 − 仕入 − 手数料 − 送料）。仕入金額が未入力（下書き等）の場合は null。
-     *
-     * @return int|null
-     */
-    public function grossProfit(): ?int
-    {
-        $cost = $this->purchase?->price;
-
-        if ($cost === null) {
-            return null;
-        }
-
-        return $this->sale_price - $cost - $this->fee - $this->shipping_cost;
-    }
 }

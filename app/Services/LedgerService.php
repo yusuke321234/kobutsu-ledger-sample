@@ -8,6 +8,7 @@ use App\Contracts\Repositories\UserRepositoryInterface;
 use App\Contracts\Services\LedgerServiceInterface;
 use App\Enums\Kubun;
 use App\Enums\VerificationMethod;
+use App\Support\DateText;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Mpdf\Mpdf;
@@ -319,10 +320,10 @@ class LedgerService implements LedgerServiceInterface
 
         //
         $result = [
-            // 2テーブル混在のため行 id は種別付きにする（Vue の :key 用。単体の id は purchase_id）
+            // 2テーブル混在のため行 id は種別付きにする（画面の一覧の key 用。単体の id は purchase_id）
             'id' => 'purchase-' . $purchaseData['id'],
             'record_type' => 'receive',
-            'transaction_date' => $this->toDateString($purchaseData['transaction_date'] ?? null),
+            'transaction_date' => DateText::toDateString($purchaseData['transaction_date'] ?? null),
             'kubun' => (string)$purchaseData['kubun'],
             // 払出し行の区別出し分け用（受入れ行では未使用。行の形を揃えるため null を置く）
             'source_kubun' => null,
@@ -365,7 +366,7 @@ class LedgerService implements LedgerServiceInterface
         $result = [
             'id' => 'sale-' . $saleData['id'],
             'record_type' => 'payout',
-            'transaction_date' => $this->toDateString($saleData['sale_date'] ?? null),
+            'transaction_date' => DateText::toDateString($saleData['sale_date'] ?? null),
             'kubun' => null,
             // 払出しの区別を法令準拠で出し分けるため、元になった仕入の区別を持ち回す（画面では未使用）
             'source_kubun' => $sourceKubun,
@@ -382,27 +383,6 @@ class LedgerService implements LedgerServiceInterface
             'amount' => (int)$saleData['sale_price'],
             'purchase_id' => (string)$saleData['purchase_id'],
         ];
-        return $result;
-    }
-
-
-
-    /**
-     * 日付文字列を 'Y-m-d' に整形する（null はそのまま null）
-     *
-     * @param string|null $value
-     * @return string|null
-     */
-    private function toDateString(?string $value): ?string
-    {
-        $result = null;
-        if ($value !== null) {
-            $result = Carbon::parse($value)->toDateString();
-        } else {
-            // no action.
-        }
-
-        //
         return $result;
     }
 
