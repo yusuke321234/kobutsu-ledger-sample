@@ -1,0 +1,48 @@
+name: Security scan (dependency audit)
+
+# 依存パッケージの既知の脆弱性を定期的に調べる。
+# 毎週 + 依存を更新したとき + 手動実行。high 以上の脆弱性があればジョブを失敗させる。
+on:
+  schedule:
+    - cron: '0 0 * * 1'   # 毎週月曜 00:00 UTC
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'composer.lock'
+      - 'package-lock.json'
+      - '.github/workflows/security-scan.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+
+      # PHP 依存（composer.lock）。本番に載せるものだけを見る（dev 依存は除く）
+      - name: composer audit (PHP 依存)
+        run: composer audit --locked --no-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # JS 依存（package-lock.json）。本番に載せるものだけを見て、high 以上で失敗させる
+      - name: npm audit (JS 依存)
+        run: npm audit --omit=dev --audit-level=high

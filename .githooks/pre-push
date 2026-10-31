@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# push の直前に、CI の test ジョブと同じ「解析とテスト」を手元で流す。落ちたら push を止める。
+# E2E は時間がかかるので CI（e2e ジョブ）に任せる。
+#
+# 有効にする（各 PC で1回）：リポジトリのルートで  git config core.hooksPath .githooks
+# 今回だけ飛ばす：git push --no-verify
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+# PHP は 8.3 以上を使う（php8.3 という名前のコマンドがあれば優先する）
+php_bin=''
+if command -v php8.3 > /dev/null 2>&1; then
+  php_bin='php8.3'
+elif command -v php > /dev/null 2>&1 && php -r 'exit(PHP_VERSION_ID >= 80300 ? 0 : 1);'; then
+  php_bin='php'
+fi
+if [ -z "$php_bin" ] || ! command -v npm > /dev/null 2>&1; then
+  echo "pre-push: PHP 8.3 か npm が見つからないので、解析とテストを省略します（CI では必ず流れます）" >&2
+  exit 0
+fi
+
+cd "$repo_root"
+echo "pre-push: 解析とテストを流します（30〜60秒）"
+npm run --silent check
+npm run --silent types:check
+npm run --silent lint:naming
+"$php_bin" vendor/bin/phpstan analyse --memory-limit=1G --no-progress
+"$php_bin" vendor/bin/phpcs -q
+"$php_bin" artisan test
+echo "pre-push: すべて通りました"

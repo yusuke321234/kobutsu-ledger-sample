@@ -1,0 +1,46 @@
+<?xml version="1.0"?>
+<!--
+  PHP の見た目の規約チェック（composer phpcs）。Pint は使わない（手書きの規約が正。03-coding-style）。
+  ここに入れるのは、03-coding-style のうち機械で線を引けるものだけ。型や構造の規約は PHPStan（phpstan.neon）。
+-->
+<ruleset name="Kobucho">
+    <description>コブチョウの PHP の書き方（03-coding-style）</description>
+
+    <file>app</file>
+    <file>routes</file>
+    <file>database</file>
+    <file>tests</file>
+
+    <arg name="extensions" value="php"/>
+    <arg value="sp"/>
+
+    <!-- アロー関数は fn()（空白なし） -->
+    <rule ref="./phpcs/Kobucho/Sniffs/Functions/ArrowFunctionSpacingSniff.php"/>
+
+    <!-- キャストのあとに空白を入れない（(string)$x） -->
+    <rule ref="Generic.Formatting.SpaceAfterCast">
+        <properties>
+            <property name="spacing" value="0"/>
+        </properties>
+    </rule>
+
+    <!--
+      メソッドとメソッドのあいだは3行空ける（docs/conventions/03-coding-style.md）。
+      クラスの { の直後の最初のメソッドと、最後のメソッドのあとの } は空けない（0行）。
+      プロパティと最初のメソッドのあいだ（Before）は規約で決めていないので見ない。
+      対象は app/ だけ。テストは「テスト＋data_provider」を続けて書く、インターフェース（Contracts）は宣言を詰めて並べる、
+      のため対象外。
+    -->
+    <rule ref="Squiz.WhiteSpace.FunctionSpacing">
+        <properties>
+            <property name="spacing" value="3"/>
+            <property name="spacingBeforeFirst" value="0"/>
+            <property name="spacingAfterLast" value="0"/>
+        </properties>
+        <include-pattern>*/app/*</include-pattern>
+        <exclude-pattern>*/app/Contracts/*</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.WhiteSpace.FunctionSpacing.Before">
+        <severity>0</severity>
+    </rule>
+</ruleset>

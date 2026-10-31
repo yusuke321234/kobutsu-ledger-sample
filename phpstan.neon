@@ -1,0 +1,15 @@
+# PHP の型の解析（PHPStan + Larastan）と、規約の自作ルール。実行は composer phpstan。
+# 今あるコードへの型の指摘は phpstan-baseline.neon に記録して受け入れ、新しく書くコードから厳しく見る
+# （ベースラインを作り直すときは composer phpstan:baseline）。規約の自作ルールはベースラインに入れない。
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    level: 5
+    paths:
+        - app/
+
+rules:
+    - Tests\PHPStan\Rules\NoConditionInArrayValueRule
+    - Tests\PHPStan\Rules\NoCountThenFirstRule

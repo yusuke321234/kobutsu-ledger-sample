@@ -1,0 +1,141 @@
+name: CI
+
+# main への push とプルリクエストで、次の3つを流す。
+# - test：整形・Lint・型チェック・規約のチェック・PHPUnit（公式スターターキットの tests.yml に規約のチェックを足したもの）
+# - e2e：画面の E2E（Playwright・実ブラウザ）
+# どちらかが落ちたら、そのコミットは「通っていない」扱いにする。
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+# GitHub のトークンは読み取りだけにする（公式スターターキットと同じ）
+permissions:
+  contents: read
+
+# 同じブランチで新しい push が来たら、古い実行は止める
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Vite+ / React Compiler（@rolldown/plugin-babel）は Node 22.12 以上が必要
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          npm ci
+
+      # .env はテスト用の鍵（APP_KEY）のためだけに作る。DB は phpunit.xml のとおりメモリ上の SQLite
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # ビルドで Wayfinder の生成物（型チェックに必要）と manifest（画面を返すテストに必要）ができる
+      - name: Build frontend
+        run: npm run build
+
+      - name: Format, lint and type check
+        run: |
+          npm run check
+          npm run types:check
+
+      # このリポジトリ独自の規約のうち、機械で線を引けるもの（規約の正は docs/conventions/）
+      # - 命名（ESLint の naming-convention。eslint.config.ts）
+      # - PHP の型と構造（PHPStan + Larastan と自作ルール。phpstan.neon・tests/PHPStan/Rules/）
+      # - PHP の見た目（PHP_CodeSniffer と自作ルール。phpcs.xml・phpcs/Kobucho/）
+      - name: Project conventions (naming, PHPStan, PHPCS)
+        run: |
+          npm run lint:naming
+          composer phpstan
+          composer phpcs
+
+      - name: PHPUnit
+        run: php artisan test
+
+  # 画面の E2E（Playwright・実ブラウザ）。test ジョブと同時に走らせる。
+  # DB はファイルの SQLite、サーバーは php -S（tests/e2e/serve.sh）なので、外部サービスは要らない
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # setup-php が入れた php を使う（tests/e2e/env.ts）
+      E2E_PHP: php
+      # npm run e2e と同じブラウザの置き場（.cache/ms-playwright）
+      PLAYWRIGHT_BROWSERS_PATH: .cache/ms-playwright
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          tools: composer:v2
+          coverage: none
+
+      - name: Install dependencies
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          npm ci
+
+      # APP_KEY のためだけに .env を作る（DB・storage は tests/e2e/env.ts が .e2e/ に隔離する）
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # E2E は public/build のビルド済みアセットで配信する
+      - name: Build frontend
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E
+        run: npm run e2e
+
+      # 落ちたときだけ、画面の記録（trace）を残す。Actions の実行画面からダウンロードして
+      # `npx playwright show-trace trace.zip` で、どの操作で止まったかを見られる
+      - name: Upload Playwright traces
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

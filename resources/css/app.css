@@ -1,0 +1,55 @@
+@import 'tailwindcss';
+
+/* shadcn/ui の開閉アニメーション（data-[state=open]:animate-in 等） */
+@import 'tw-animate-css';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* 本文が最大幅(max-w-[1200px]=75rem)に達する境界。カード一覧の 6 列/6 枚化に使う（wide:grid-cols-6 等）。
+       単位は必ず rem にする（既定の sm/md/lg=rem と混在すると v4 が px を別枠で先頭に並べ、
+       sm の 1/5 が wide の 1/6 を上書きしてしまう）。75rem = 1200px で sm→…→wide の正しい順に載る。 */
+    --breakpoint-wide: 75rem;
+
+    /* shadcn/ui の部品が参照する色。今の画面の配色（墨色 #1b1b18・生成り #FDFDFC・グレー）に合わせる。
+       角丸（--radius-*）は Tailwind 既定のまま（見た目を変えないため上書きしない） */
+    --color-background: #fdfdfc;
+    --color-foreground: #1b1b18;
+    --color-card: #ffffff;
+    --color-card-foreground: #1b1b18;
+    --color-popover: #ffffff;
+    --color-popover-foreground: #1b1b18;
+    --color-primary: #1b1b18;
+    --color-primary-foreground: #ffffff;
+    --color-secondary: var(--color-gray-100);
+    --color-secondary-foreground: #1b1b18;
+    --color-muted: var(--color-gray-100);
+    --color-muted-foreground: var(--color-gray-500);
+    --color-accent: var(--color-gray-100);
+    --color-accent-foreground: #1b1b18;
+    --color-destructive: #f53003;
+    --color-destructive-foreground: #f53003;
+    --color-border: var(--color-gray-200);
+    --color-input: var(--color-gray-300);
+    --color-ring: var(--color-blue-300);
+}
+
+@layer base {
+    /* Tailwind v4 の Preflight は button を cursor:default にするため、操作可能なボタンにポインタを戻す */
+    button:not(:disabled),
+    [role='button']:not(:disabled) {
+        cursor: pointer;
+    }
+
+    /* iOS Safari は input[type=date] に固有の最小幅を与え、width:100% でもコンテナからはみ出す。
+       ネイティブ外観を外し min-width:0 で親（w-full）の幅に従わせる（タップで日付ピッカーは従来どおり開く） */
+    input[type='date'] {
+        -webkit-appearance: none;
+        appearance: none;
+        min-width: 0;
+    }
+}

@@ -1,0 +1,15 @@
+# 依存パッケージの更新提案（プルリクエスト）。CI が通るかで、そのまま取り込めるかが分かる
+version: 2
+updates:
+  - package-ecosystem: composer
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

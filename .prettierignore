@@ -1,0 +1,6 @@
+public/build
+vendor
+storage
+bootstrap/ssr
+package-lock.json
+composer.lock
