@@ -91,6 +91,32 @@ class PurchaseRepository implements PurchaseRepositoryInterface
 
 
     /**
+     * 仕入を1件、行ロックを掛けて取得する（トランザクションの中で使う。売却の有無も一緒に返す）
+     *
+     * 状態を確かめてから書き込む処理（売却の登録・仕入の更新と削除・写真の追加）で、
+     * 確かめたあとに、同時に来た別のリクエストに状態を変えられないようにする。
+     *
+     * @param string $id
+     * @param string $userId
+     * @return array|null
+     */
+    public function getDataForUpdate(string $id, string $userId): ?array
+    {
+        //
+        $purchase = $this->purchase
+            ->with('sale')
+            ->where('id', $id)
+            ->where('user_id', $userId)
+            ->lockForUpdate()
+            ->first();
+
+        //
+        return $purchase?->toArray();
+    }
+
+
+
+    /**
      * 仕入を作成する
      *
      * @param string $userId

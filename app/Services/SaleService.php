@@ -2,86 +2,153 @@
 
 namespace App\Services;
 
+use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Contracts\Repositories\SaleRepositoryInterface;
 use App\Contracts\Services\SaleServiceInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
  * 売却（払出）。1仕入＝1売却（ロットを分けて売る形は扱わない）。
  * 売却を記録すると、在庫は「売却済」になり、台帳の払出行も自動でできる（LedgerService が導出）。
- *
- * 売却を記録すると、台帳の払出しの行が自動でできる（台帳は保存せず記録から組み立てるため）。
  * 粗利は**単品の素朴粗利（売価−仕入）**を返す。
+ *
+ * 台帳の整合性のため、次の2つはここで守る（入力チェックだけに頼らない）：
+ * - 1つの仕入に売却は1件まで（同時に2件の「売れた」が来ても、2件目は仕入の行のロックが解けるのを待ってから確かめる）
+ * - 売却日は仕入日より前にできない
  */
 class SaleService implements SaleServiceInterface
 {
     private SaleRepositoryInterface $saleRepository;
 
+    private PurchaseRepositoryInterface $purchaseRepository;
+
     /**
-     * SaleRepositoryInterface を注入する
+     * SaleRepositoryInterface / PurchaseRepositoryInterface を注入する
      *
      * @param SaleRepositoryInterface $saleRepository
+     * @param PurchaseRepositoryInterface $purchaseRepository
      */
-    public function __construct(SaleRepositoryInterface $saleRepository)
+    public function __construct(SaleRepositoryInterface $saleRepository, PurchaseRepositoryInterface $purchaseRepository)
     {
         $this->saleRepository = $saleRepository;
+        $this->purchaseRepository = $purchaseRepository;
     }
 
 
 
     /**
      * 売却を登録する（「売れた」）。
-     * 対象の仕入が自分のもので・下書きでなく・未売却であることは FormRequest で担保済み。
+     *
+     * FormRequest でも同じことを確かめているが、確かめてから書き込むまでの間に別のリクエストが割り込めるため、
+     * 仕入の行をロックしてから確かめ直す。
      *
      * @param string $userId
      * @param array $registerData
-     * @return array 作成した売却
+     * @return array ['status' => 'ok' | 'not_sellable'（本人の仕入でない・下書き） | 'sold'（売却済み）
+     *               | 'before_purchase_date'（売却日が仕入日より前）, 'data' => 作成した売却 | 仕入日]
      */
     public function register(string $userId, array $registerData): array
     {
-        $saleId = $this->saleRepository->create($userId, $registerData);
-        Log::info("売却を登録しました。 sale_id: {$saleId}");
+        //
+        $result = DB::transaction(function () use ($userId, $registerData): array {
+            // 対象の仕入を行ロックして取り直す
+            $purchaseId = (string)$registerData['purchase_id'];
+            Log::info("売却する仕入を確認します。 purchase_id: {$purchaseId}, user_id: {$userId}");
+            $purchaseData = $this->purchaseRepository->getDataForUpdate($purchaseId, $userId);
+            if ($purchaseData !== null && (bool)$purchaseData['is_draft'] === false) {
+                // ok.
+            } else {
+                Log::info("売却できる仕入ではありません。 purchase_id: {$purchaseId}");
+
+                //
+                return ['status' => 'not_sellable', 'data' => null];
+            }
+
+            // 1仕入=1売却（取り消した売却は数えない）
+            if ($purchaseData['sale'] === null) {
+                // ok.
+            } else {
+                Log::info("すでに売却済みのため登録しません。 purchase_id: {$purchaseId}");
+
+                //
+                return ['status' => 'sold', 'data' => null];
+            }
+
+            // 売却日は仕入日より前にできない
+            $transactionDate = $this->toDateString($purchaseData['transaction_date']);
+            if (strcmp((string)$registerData['sale_date'], (string)$transactionDate) >= 0) {
+                // ok.
+            } else {
+                Log::info("売却日が仕入日より前のため登録しません。 sale_date: {$registerData['sale_date']}, transaction_date: {$transactionDate}");
+
+                //
+                return ['status' => 'before_purchase_date', 'data' => ['transaction_date' => $transactionDate]];
+            }
+
+            //
+            $saleId = $this->saleRepository->create($userId, $registerData);
+            Log::info("売却を登録しました。 sale_id: {$saleId}");
+
+            //
+            $saleData = $this->saleRepository->getData($saleId, $userId);
+            return ['status' => 'ok', 'data' => $this->shapeSale($saleData)];
+        });
 
         //
-        $saleData = $this->saleRepository->getData($saleId, $userId);
-
-        //
-        $result = $this->shapeSale($saleData);
         return $result;
     }
 
 
 
     /**
-     * 売却を更新する。本人のものでなければ null。
+     * 売却を更新する（販路・売価・手数料・売却日の訂正）。
      *
      * @param string $userId
      * @param string $id
      * @param array $updateData
-     * @return array|null 更新後の売却。対象が無ければ null
+     * @return array ['status' => 'ok' | 'not_found'（本人の売却が無い） | 'before_purchase_date'（売却日が仕入日より前）,
+     *               'data' => 更新後の売却 | 仕入日]
      */
-    public function update(string $userId, string $id, array $updateData): ?array
+    public function update(string $userId, string $id, array $updateData): array
     {
-        // 本人のものかを先に確認する
-        Log::info("更新対象の売却を確認します。 sale_id: {$id}, user_id: {$userId}");
-        $existing = $this->saleRepository->getData($id, $userId);
-        if ($existing === null) {
-            Log::info("更新対象の売却が見つかりませんでした。 sale_id: {$id}");
+        //
+        $result = DB::transaction(function () use ($userId, $id, $updateData): array {
+            // 本人のものかを先に確認する
+            Log::info("更新対象の売却を確認します。 sale_id: {$id}, user_id: {$userId}");
+            $existing = $this->saleRepository->getData($id, $userId);
+            if ($existing !== null) {
+                Log::info("更新対象の売却が見つかりました。 sale_id: {$id}");
+            } else {
+                Log::info("更新対象の売却が見つかりませんでした。 sale_id: {$id}");
+
+                //
+                return ['status' => 'not_found', 'data' => null];
+            }
+
+            // 売却日は仕入日より前にできない（仕入日の変更と同時に来ても食い違わないよう、仕入の行をロックしてから比べる）
+            $purchaseData = $this->purchaseRepository->getDataForUpdate((string)$existing['purchase_id'], $userId);
+            $transactionDate = $this->toDateString($purchaseData['transaction_date'] ?? null);
+            if ($transactionDate === null || strcmp((string)$updateData['sale_date'], $transactionDate) >= 0) {
+                // ok.
+            } else {
+                Log::info("売却日が仕入日より前のため更新しません。 sale_date: {$updateData['sale_date']}, transaction_date: {$transactionDate}");
+
+                //
+                return ['status' => 'before_purchase_date', 'data' => ['transaction_date' => $transactionDate]];
+            }
 
             //
-            return null;
-        } else {
-            Log::info("更新対象の売却が見つかりました。 sale_id: {$id}");
-        }
+            $this->saleRepository->update($id, $userId, $updateData);
+            Log::info("売却を更新しました。 sale_id: {$id}");
+
+            //
+            $saleData = $this->saleRepository->getData($id, $userId);
+            return ['status' => 'ok', 'data' => $this->shapeSale($saleData)];
+        });
 
         //
-        $this->saleRepository->update($id, $userId, $updateData);
-        Log::info("売却を更新しました。 sale_id: {$id}");
-
-        //
-        $saleData = $this->saleRepository->getData($id, $userId);
-        $result = $this->shapeSale($saleData);
         return $result;
     }
 

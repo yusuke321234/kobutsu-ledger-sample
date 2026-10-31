@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Contracts\Services\PurchaseServiceInterface;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class PurchaseService implements PurchaseServiceInterface
@@ -104,34 +105,68 @@ class PurchaseService implements PurchaseServiceInterface
 
 
     /**
-     * 仕入を更新する（インライン編集・下書きの完成）。本人のものでなければ null。
+     * 仕入を更新する（インライン編集・下書きの完成）。
+     *
+     * 売却済みの仕入は、台帳に払出しの行が出ている。次の更新を許すと、台帳が食い違うので受け付けない：
+     * - 下書きに戻す（下書きは台帳に載らないため、払出しの行だけが残る）
+     * - 仕入日を売却日より後にする（売ったあとに仕入れたことになる）
      *
      * @param string $userId
      * @param string $id
      * @param array $updateData
-     * @return array|null 更新後の仕入。対象が無ければ null
+     * @return array ['status' => 'ok' | 'not_found'（本人の仕入が無い） | 'sold'（売却済みを下書きに戻そうとした）
+     *               | 'after_sale_date'（仕入日が売却日より後）, 'data' => 更新後の仕入 | 売却日]
      */
-    public function update(string $userId, string $id, array $updateData): ?array
+    public function update(string $userId, string $id, array $updateData): array
     {
-        // 本人のものかを先に確認する
-        Log::info("更新対象の仕入を確認します。 purchase_id: {$id}, user_id: {$userId}");
-        $existing = $this->purchaseRepository->getData($id, $userId);
-        if ($existing === null) {
-            Log::info("更新対象の仕入が見つかりませんでした。 purchase_id: {$id}");
+        //
+        $result = DB::transaction(function () use ($userId, $id, $updateData): array {
+            // 本人のものかを先に確認する（売却の登録と同時に来ても食い違わないよう、行をロックしてから確かめる）
+            Log::info("更新対象の仕入を確認します。 purchase_id: {$id}, user_id: {$userId}");
+            $existing = $this->purchaseRepository->getDataForUpdate($id, $userId);
+            if ($existing !== null) {
+                Log::info("更新対象の仕入が見つかりました。 purchase_id: {$id}");
+            } else {
+                Log::info("更新対象の仕入が見つかりませんでした。 purchase_id: {$id}");
+
+                //
+                return ['status' => 'not_found', 'data' => null];
+            }
+
+            // 未売却なら、どの項目も直せる
+            $saleData = $existing['sale'];
+            if ($saleData !== null) {
+                // ok.
+            } else {
+                return $this->updateAndShape($userId, $id, $updateData);
+            }
+
+            // 売却済みは下書きに戻せない
+            if ((bool)$updateData['is_draft'] === false) {
+                // ok.
+            } else {
+                Log::info("売却済みのため下書きに戻しません。 purchase_id: {$id}");
+
+                //
+                return ['status' => 'sold', 'data' => null];
+            }
+
+            // 売却済みの仕入日は、売却日より後にできない
+            $saleDate = $this->toDateString($saleData['sale_date']);
+            if (strcmp((string)$updateData['transaction_date'], (string)$saleDate) <= 0) {
+                // ok.
+            } else {
+                Log::info("仕入日が売却日より後のため更新しません。 transaction_date: {$updateData['transaction_date']}, sale_date: {$saleDate}");
+
+                //
+                return ['status' => 'after_sale_date', 'data' => ['sale_date' => $saleDate]];
+            }
 
             //
-            return null;
-        } else {
-            Log::info("更新対象の仕入が見つかりました。 purchase_id: {$id}");
-        }
+            return $this->updateAndShape($userId, $id, $updateData);
+        });
 
         //
-        $this->purchaseRepository->update($id, $userId, $updateData);
-        Log::info("仕入を更新しました。 purchase_id: {$id}");
-
-        //
-        $purchaseData = $this->purchaseRepository->getData($id, $userId);
-        $result = $this->shapePurchase($purchaseData);
         return $result;
     }
 
@@ -148,9 +183,55 @@ class PurchaseService implements PurchaseServiceInterface
      */
     public function delete(string $userId, string $id): array
     {
-        // 本人のものかを先に確認する
+        //
+        $result = DB::transaction(function () use ($userId, $id): array {
+            return $this->deleteUnlessSold($userId, $id);
+        });
+
+        //
+        return $result;
+    }
+
+
+
+    /**
+     * 相手方チップ用の履歴（重複排除済み）を取得する
+     *
+     * @param string $userId
+     * @return array
+     */
+    public function getCounterparties(string $userId): array
+    {
+        $counterpartyList = $this->purchaseRepository->getDistinctCounterparties($userId);
+        Log::info("相手方履歴を取得しました。 user_id: {$userId}, 件数: " . count($counterpartyList));
+
+        //
+        $list = [];
+        foreach ($counterpartyList as $counterparty) {
+            $list[] = $this->shapeCounterparty($counterparty);
+        }
+
+        //
+        $result = [
+            'list' => $list,
+        ];
+        return $result;
+    }
+
+
+
+    /**
+     * 売却済みでなければ仕入を論理削除する（delete のトランザクションの中で呼ぶ）
+     *
+     * @param string $userId
+     * @param string $id
+     * @return array ['status' => 'ok' | 'not_found' | 'sold']
+     */
+    private function deleteUnlessSold(string $userId, string $id): array
+    {
+        // 本人のものかを先に確認する（売却の登録と同時に来ても食い違わないよう、行をロックしてから確かめる）
         Log::info("削除対象の仕入を確認します。 purchase_id: {$id}, user_id: {$userId}");
-        $purchaseData = $this->purchaseRepository->getData($id, $userId);
+        $purchaseData = $this->purchaseRepository->getDataForUpdate($id, $userId);
         if ($purchaseData !== null) {
             // ok.
         } else {
@@ -184,27 +265,22 @@ class PurchaseService implements PurchaseServiceInterface
 
 
     /**
-     * 相手方チップ用の履歴（重複排除済み）を取得する
+     * 仕入を更新し、更新後の仕入を整形して返す（update の確認が済んだあとに呼ぶ）
      *
      * @param string $userId
-     * @return array
+     * @param string $id
+     * @param array $updateData
+     * @return array ['status' => 'ok', 'data' => 更新後の仕入]
      */
-    public function getCounterparties(string $userId): array
+    private function updateAndShape(string $userId, string $id, array $updateData): array
     {
-        $counterpartyList = $this->purchaseRepository->getDistinctCounterparties($userId);
-        Log::info("相手方履歴を取得しました。 user_id: {$userId}, 件数: " . count($counterpartyList));
+        //
+        $this->purchaseRepository->update($id, $userId, $updateData);
+        Log::info("仕入を更新しました。 purchase_id: {$id}");
 
         //
-        $list = [];
-        foreach ($counterpartyList as $counterparty) {
-            $list[] = $this->shapeCounterparty($counterparty);
-        }
-
-        //
-        $result = [
-            'list' => $list,
-        ];
-        return $result;
+        $purchaseData = $this->purchaseRepository->getData($id, $userId);
+        return ['status' => 'ok', 'data' => $this->shapePurchase($purchaseData)];
     }
 
 

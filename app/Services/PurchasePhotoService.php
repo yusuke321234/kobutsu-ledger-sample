@@ -7,6 +7,7 @@ use App\Contracts\Repositories\PurchasePhotoRepositoryInterface;
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Contracts\Services\PurchasePhotoServiceInterface;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -50,44 +51,12 @@ class PurchasePhotoService implements PurchasePhotoServiceInterface
      */
     public function register(string $userId, string $purchaseId, UploadedFile $file): array
     {
-        // 自分の仕入かを確認する
-        Log::info("写真の登録先の仕入を確認します。 purchase_id: {$purchaseId}, user_id: {$userId}");
-        $purchaseData = $this->purchaseRepository->getData($purchaseId, $userId);
-        if ($purchaseData === null) {
-            Log::info("登録先の仕入が見つかりませんでした。 purchase_id: {$purchaseId}");
-
-            //
-            return ['status' => 'not_found', 'data' => null];
-        } else {
-            Log::info("登録先の仕入が見つかりました。 purchase_id: {$purchaseId}");
-        }
-
-        // 枚数の上限を確認する
-        $count = $this->purchasePhotoRepository->countByPurchaseId($purchaseId, $userId);
-        Log::info("写真の枚数を確認します。 現在: {$count}, 上限: " . PurchasePhotoConsts::MAX_COUNT);
-        if ($count >= PurchasePhotoConsts::MAX_COUNT) {
-            Log::info("上限に達しているため保存しません。");
-
-            //
-            return ['status' => 'limit_exceeded', 'data' => null];
-        } else {
-            // ok.
-        }
-
-        // Web 非公開の local ディスクへ保存（ファイル名は Laravel が衝突しない乱数で付ける）
-        $path = $file->store("purchase-photos/{$userId}", 'local');
-        $photoId = $this->purchasePhotoRepository->create($userId, $purchaseId, (string)$path);
-        Log::info("写真を登録しました。 photo_id: {$photoId}");
+        // 枚数を数えてから保存するまでの間に、同じ仕入への別の追加が割り込まないよう、仕入の行をロックしてから数える
+        $result = DB::transaction(function () use ($userId, $purchaseId, $file): array {
+            return $this->registerWithinLimit($userId, $purchaseId, $file);
+        });
 
         //
-        $result = [
-            'status' => 'ok',
-            'data' => [
-                'id' => $photoId,
-                // 認証付きの配信ルート。画面へは相対 URL（/photos/{id}）で渡す
-                'url' => route('photos.show', ['id' => $photoId], false),
-            ],
-        ];
         return $result;
     }
 
@@ -152,5 +121,58 @@ class PurchasePhotoService implements PurchasePhotoServiceInterface
 
         //
         return Storage::disk('local')->path($path);
+    }
+
+
+
+    /**
+     * 枚数の上限を確かめてから写真を保存する（register のトランザクションの中で呼ぶ）
+     *
+     * @param string $userId
+     * @param string $purchaseId
+     * @param UploadedFile $file
+     * @return array status / data
+     */
+    private function registerWithinLimit(string $userId, string $purchaseId, UploadedFile $file): array
+    {
+        // 自分の仕入かを確認する
+        Log::info("写真の登録先の仕入を確認します。 purchase_id: {$purchaseId}, user_id: {$userId}");
+        $purchaseData = $this->purchaseRepository->getDataForUpdate($purchaseId, $userId);
+        if ($purchaseData === null) {
+            Log::info("登録先の仕入が見つかりませんでした。 purchase_id: {$purchaseId}");
+
+            //
+            return ['status' => 'not_found', 'data' => null];
+        } else {
+            Log::info("登録先の仕入が見つかりました。 purchase_id: {$purchaseId}");
+        }
+
+        // 枚数の上限を確認する
+        $count = $this->purchasePhotoRepository->countByPurchaseId($purchaseId, $userId);
+        Log::info("写真の枚数を確認します。 現在: {$count}, 上限: " . PurchasePhotoConsts::MAX_COUNT);
+        if ($count >= PurchasePhotoConsts::MAX_COUNT) {
+            Log::info("上限に達しているため保存しません。");
+
+            //
+            return ['status' => 'limit_exceeded', 'data' => null];
+        } else {
+            // ok.
+        }
+
+        // Web 非公開の local ディスクへ保存（ファイル名は Laravel が衝突しない乱数で付ける）
+        $path = $file->store("purchase-photos/{$userId}", 'local');
+        $photoId = $this->purchasePhotoRepository->create($userId, $purchaseId, (string)$path);
+        Log::info("写真を登録しました。 photo_id: {$photoId}");
+
+        //
+        $result = [
+            'status' => 'ok',
+            'data' => [
+                'id' => $photoId,
+                // 認証付きの配信ルート。画面へは相対 URL（/photos/{id}）で渡す
+                'url' => route('photos.show', ['id' => $photoId], false),
+            ],
+        ];
+        return $result;
     }
 }

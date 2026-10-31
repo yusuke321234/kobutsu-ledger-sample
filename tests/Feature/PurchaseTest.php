@@ -593,6 +593,78 @@ class PurchaseTest extends TestCase
 
 
 
+    #[Test]
+    public function updateSoldPurchaseToDraftIsRefusedTest(): void
+    {
+        $this->actingAs($this->user);
+        $purchase = Purchase::factory()->create(['user_id' => $this->user->id, 'transaction_date' => '2026-07-01', 'item_name' => 'ジャンクカメラ']);
+        Sale::factory()->create(['user_id' => $this->user->id, 'purchase_id' => $purchase->id, 'sale_date' => '2026-07-10']);
+
+        // 画面からの操作で、売却済みを下書きに戻そうとする
+        $response = $this->withHeader('X-Inertia', 'true')
+            ->from(route('home'))
+            ->put(route('purchases.update', ['id' => $purchase->id]), $this->confirmedPayload(['is_draft' => true, 'item_name' => null]));
+
+        // 下書きは台帳に載らないため、戻すと払出しの行だけが残ってしまう。元の画面へ戻して理由を伝える
+        $response->assertRedirect(route('home'));
+        $response->assertInertiaToast('売却済みの仕入は下書きに戻せません。先に売却を取り消してください。', ToastConsts::ERROR);
+        $response->assertSessionHasErrors('request');
+        $this->assertDatabaseHas('purchases', ['id' => $purchase->id, 'is_draft' => false, 'item_name' => 'ジャンクカメラ']);
+
+        // 台帳は受入れ・払出しの2行のまま（画面遷移として開き直す）
+        $this->flushHeaders();
+        $this->get(route('ledger'))->assertInertia(fn(Assert $page) => $page
+            ->where('totalCount', 2)
+            ->where('ledgerList.0.record_type', 'payout')
+            ->where('ledgerList.0.item_name', 'ジャンクカメラ')
+            ->where('ledgerList.1.record_type', 'receive')
+            ->etc());
+    }
+
+
+
+    #[Test]
+    #[DataProvider('data_provider_for_updateSoldPurchaseDateTest')]
+    public function updateSoldPurchaseDateTest(string $transactionDate, bool $expectsSuccess): void
+    {
+        $this->actingAs($this->user);
+        $purchase = Purchase::factory()->create(['user_id' => $this->user->id, 'transaction_date' => '2026-07-01']);
+        Sale::factory()->create(['user_id' => $this->user->id, 'purchase_id' => $purchase->id, 'sale_date' => '2026-07-10']);
+
+        //
+        $response = $this->from(route('home'))
+            ->put(route('purchases.update', ['id' => $purchase->id]), $this->confirmedPayload(['transaction_date' => $transactionDate]));
+
+        // 売却済みの仕入日は、売却日（当日を含む）までなら直せる。売却日より後にすると、売ったあとに仕入れたことになる
+        $response->assertRedirect(route('home'));
+        if ($expectsSuccess === true) {
+            $response->assertSessionHasNoErrors();
+            $this->assertSame($transactionDate, Purchase::find($purchase->id)->transaction_date->toDateString());
+        } else {
+            $response->assertSessionHasErrors(['transaction_date' => '売却済みのため、仕入日を売却日（2026-07-10）より後にはできません。']);
+            $this->assertSame('2026-07-01', Purchase::find($purchase->id)->transaction_date->toDateString());
+        }
+    }
+    public static function data_provider_for_updateSoldPurchaseDateTest(): array
+    {
+        return [
+            'before_sale_date' => [
+                'transactionDate' => '2026-07-05',
+                'expectsSuccess' => true,
+            ],
+            'same_as_sale_date' => [
+                'transactionDate' => '2026-07-10',
+                'expectsSuccess' => true,
+            ],
+            'after_sale_date' => [
+                'transactionDate' => '2026-07-11',
+                'expectsSuccess' => false,
+            ],
+        ];
+    }
+
+
+
     // ============================ delete（論理削除・3年保存） ============================
 
     #[Test]
