@@ -18,6 +18,7 @@ return new class extends Migration
     {
         Schema::create('purchase_photos', function (Blueprint $table) {
             $table->id();
+            // 写真は法定の記載事項ではないので、仕入（と利用者）の行が消えるときは一緒に消してよい
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('purchase_id')->constrained()->cascadeOnDelete();
             $table->string('path')->comment('local ディスク上の保存パス（Web非公開）');

@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Contracts\Repositories\SaleRepositoryInterface;
 use App\Models\Sale;
+use App\Support\LikePattern;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 
@@ -52,11 +53,13 @@ class SaleRepository implements SaleRepositoryInterface
 
         // 検索（払出の品目・特徴は仕入側にあるため purchase を横断して探す）
         if ($q !== '') {
-            $query->where(function (Builder $sub) use ($q) {
-                $sub->where('counterparty_name', 'like', "%{$q}%")
-                    ->orWhereHas('purchase', function (Builder $purchaseQuery) use ($q) {
-                        $purchaseQuery->where('item_name', 'like', "%{$q}%")
-                            ->orWhere('features', 'like', "%{$q}%");
+            // % と _ は「その文字そのもの」として探す（LikePattern）
+            $pattern = LikePattern::contains($q);
+            $query->where(function (Builder $sub) use ($pattern) {
+                $sub->whereRaw("counterparty_name like ? escape '!'", [$pattern])
+                    ->orWhereHas('purchase', function (Builder $purchaseQuery) use ($pattern) {
+                        $purchaseQuery->whereRaw("item_name like ? escape '!'", [$pattern])
+                            ->orWhereRaw("features like ? escape '!'", [$pattern]);
                     });
             });
         } else {

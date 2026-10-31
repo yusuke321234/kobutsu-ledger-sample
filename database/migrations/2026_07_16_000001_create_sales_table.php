@@ -14,12 +14,13 @@ return new class extends Migration
     {
         Schema::create('sales', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            // 1仕入=1売却の制約は**アプリ層（RegisterSaleRequest）で担保**する。
+            // 台帳は3年保存。利用者・仕入の行を物理削除しても売却が道連れに消えないよう、記録が残っていれば削除できなくする
+            $table->foreignId('user_id')->constrained()->restrictOnDelete();
+            // 1仕入=1売却の制約は**アプリ層で担保**する（SaleService が仕入の行をロックしてから確かめる。入力チェックでも先に弾く）。
             // DB の unique は論理削除を認識せず「取り消した売却の行」が残るため、
             // 売却を取り消した商品を二度と売れなくなる。「deleted_at が null の行だけ一意」は
             // MySQL / SQLite 双方で移植性のある形に書けないため、DB は外部キー索引のみとする。
-            $table->foreignId('purchase_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('purchase_id')->constrained()->restrictOnDelete();
             $table->date('sale_date')->comment('売却年月日');
             $table->tinyInteger('channel')->default(9)->comment('販路（SalesChannel Enum）');
             $table->unsignedInteger('sale_price')->comment('売却金額（円）');

@@ -40,7 +40,7 @@ class RegisterSaleRequest extends FormRequest
                 // 1仕入=1売却（論理削除された売却は除外＝売却を取り消せば再度売れる）
                 Rule::unique('sales', 'purchase_id')->whereNull('deleted_at'),
             ],
-            'sale_date' => ['required', 'date'],
+            'sale_date' => ['required', 'date_format:Y-m-d'],
             'channel' => ['required', Rule::enum(SalesChannel::class)],
             'sale_price' => ['required', 'integer', 'min:0', 'max:1000000000'],
             // 商品に紐づく経費のみ（一般経費は会計ソフトの領分なので扱わない）

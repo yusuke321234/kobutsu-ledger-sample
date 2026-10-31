@@ -36,7 +36,7 @@ class RegisterPurchaseRequest extends FormRequest
 
         //
         return [
-            'transaction_date' => ['required', 'date'],
+            'transaction_date' => ['required', 'date_format:Y-m-d'],
             'kubun' => ['required', Rule::enum(Kubun::class)],
             'item_name' => [Rule::requiredIf($isConfirmed), 'nullable', 'string', 'max:255'],
             'quantity' => ['nullable', 'integer', 'min:1', 'max:100000'],
