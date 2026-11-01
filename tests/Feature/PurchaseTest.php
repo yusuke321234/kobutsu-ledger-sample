@@ -6,6 +6,7 @@ use App\Consts\ToastConsts;
 use App\Models\Purchase;
 use App\Models\Sale;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -406,6 +407,39 @@ class PurchaseTest extends TestCase
 
 
     #[Test]
+    #[DataProvider('data_provider_for_getListSearchTreatsWildcardsLiterallyTest')]
+    public function getListSearchTreatsWildcardsLiterallyTest(string $q, string $expectedItemName): void
+    {
+        $this->actingAs($this->user);
+        Purchase::factory()->create(['user_id' => $this->user->id, 'item_name' => '50%オフの品', 'features' => null, 'counterparty_name' => null]);
+        Purchase::factory()->create(['user_id' => $this->user->id, 'item_name' => '500円の品', 'features' => null, 'counterparty_name' => null]);
+        Purchase::factory()->create(['user_id' => $this->user->id, 'item_name' => 'A_B型', 'features' => null, 'counterparty_name' => null]);
+        Purchase::factory()->create(['user_id' => $this->user->id, 'item_name' => 'AXB型', 'features' => null, 'counterparty_name' => null]);
+
+        // 検索語の % と _ はワイルドカードではなく、その文字そのものとして探す
+        $this->get(route('home', ['q' => $q]))
+            ->assertInertia(fn(Assert $page) => $page
+                ->where('totalCount', 1)
+                ->where('purchaseList.0.item_name', $expectedItemName)
+                ->etc());
+    }
+    public static function data_provider_for_getListSearchTreatsWildcardsLiterallyTest(): array
+    {
+        return [
+            'percent' => [
+                'q' => '50%',
+                'expectedItemName' => '50%オフの品',
+            ],
+            'underscore' => [
+                'q' => 'A_B',
+                'expectedItemName' => 'A_B型',
+            ],
+        ];
+    }
+
+
+
+    #[Test]
     public function getListRawGrossProfitTest(): void
     {
         $this->actingAs($this->user);
@@ -738,6 +772,18 @@ class PurchaseTest extends TestCase
         //
         $response->assertNotFound();
         $this->assertDatabaseHas('purchases', ['id' => $othersPurchase->id, 'deleted_at' => null]);
+    }
+
+
+
+    #[Test]
+    public function hardDeletingUserWithRecordsIsRestrictedTest(): void
+    {
+        Purchase::factory()->create(['user_id' => $this->user->id]);
+
+        // 台帳は3年保存。利用者の行を物理削除しても、仕入が道連れに消えないよう DB が止める
+        $this->expectException(QueryException::class);
+        $this->user->forceDelete();
     }
 
 

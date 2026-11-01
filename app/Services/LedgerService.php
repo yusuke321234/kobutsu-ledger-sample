@@ -145,18 +145,19 @@ class LedgerService implements LedgerServiceInterface
             '相手方の住所', '相手方の氏名', '相手方の職業', '相手方の年齢', '確認方法',
         ]);
         foreach ($rowList as $rowData) {
+            // 利用者が入れた文字（品目・特徴・相手方）は、表計算ソフトに数式として読まれないようにする
             fputcsv($handle, [
                 $rowData['transaction_date'],
                 $rowData['record_type_label'],
                 $rowData['division_label'],
-                $rowData['item_name'],
+                $this->toCsvText($rowData['item_name']),
                 $rowData['quantity'],
-                $rowData['features'],
+                $this->toCsvText($rowData['features']),
                 $rowData['amount'],
-                $rowData['counterparty_address'],
-                $rowData['counterparty_name'],
-                $rowData['counterparty_occupation'],
-                $rowData['counterparty_age'],
+                $this->toCsvText($rowData['counterparty_address']),
+                $this->toCsvText($rowData['counterparty_name']),
+                $this->toCsvText($rowData['counterparty_occupation']),
+                $this->toCsvText($rowData['counterparty_age']),
                 $rowData['verification_label'],
             ]);
         }
@@ -397,6 +398,28 @@ class LedgerService implements LedgerServiceInterface
         $result = null;
         if ($value !== null) {
             $result = Carbon::parse($value)->toDateString();
+        } else {
+            // no action.
+        }
+
+        //
+        return $result;
+    }
+
+
+
+    /**
+     * 利用者が入れた文字を、CSV に書いても表計算ソフトに数式として読まれない形にする（CSV インジェクション対策）。
+     * = + - @ タブ 改行（CR）で始まるときは、先頭に ' を付けて文字列として扱わせる。
+     *
+     * @param string|null $value
+     * @return string|null
+     */
+    private function toCsvText(?string $value): ?string
+    {
+        $result = $value;
+        if ($value !== null && preg_match('/^[=+\-@\t\r]/', $value) === 1) {
+            $result = "'" . $value;
         } else {
             // no action.
         }

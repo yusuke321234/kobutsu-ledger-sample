@@ -26,7 +26,7 @@ class UpdateSaleRequest extends FormRequest
 
         //
         return [
-            'sale_date' => ['required', 'date'],
+            'sale_date' => ['required', 'date_format:Y-m-d'],
             'channel' => ['required', Rule::enum(SalesChannel::class)],
             'sale_price' => ['required', 'integer', 'min:0', 'max:1000000000'],
             'fee' => ['nullable', 'integer', 'min:0', 'max:1000000000'],

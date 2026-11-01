@@ -24,8 +24,8 @@ class GetLedgerExportRequest extends FormRequest
         //
         return [
             // 期間絞り込み（未指定は全期間）
-            'from' => ['nullable', 'date'],
-            'to' => ['nullable', 'date', 'after_or_equal:from'],
+            'from' => ['nullable', 'date_format:Y-m-d'],
+            'to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:from'],
             // 検索語（品目・特徴・相手方氏名の部分一致）
             'q' => ['nullable', 'string', 'max:255'],
         ];

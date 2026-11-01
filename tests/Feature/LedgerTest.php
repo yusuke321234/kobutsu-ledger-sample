@@ -100,6 +100,12 @@ class LedgerTest extends TestCase
                 'queryData' => ['from' => 'あ'],
                 'expected' => 'from',
             ],
+            // 日付は YYYY-MM-DD だけを受け付ける（出力のファイル名にも使うため、形をそろえる）
+            'not_iso_date' => [
+                'testCase' => 'not_iso_date',
+                'queryData' => ['from' => '2026/07/01'],
+                'expected' => 'from',
+            ],
             // 期間の前後が逆
             'to_before_from' => [
                 'testCase' => 'to_before_from',
@@ -545,5 +551,53 @@ class LedgerTest extends TestCase
         // 終端日（7/31）も含まれる。期間外は出ない
         $this->assertStringContainsString('期間内の品', $content);
         $this->assertStringNotContainsString('期間外の品', $content);
+    }
+
+
+
+    #[Test]
+    public function exportCsvNeutralizesFormulaTest(): void
+    {
+        $this->actingAs($this->user);
+        Purchase::factory()->create([
+            'user_id' => $this->user->id,
+            'transaction_date' => '2026-07-01',
+            'item_name' => '=HYPERLINK("https://example.com","x")',
+            'features' => '+1',
+            'counterparty_name' => '@SUM(A1)',
+            'counterparty_address' => '-2+3',
+        ]);
+        Purchase::factory()->create([
+            'user_id' => $this->user->id,
+            'transaction_date' => '2026-07-02',
+            'item_name' => 'Nikon F3',
+        ]);
+
+        //
+        $content = $this->get(route('ledger.csv'))->getContent();
+
+        // = + - @ で始まる文字は、表計算ソフトに数式として読まれないよう先頭に ' を付ける。ふつうの文字はそのまま
+        $this->assertStringContainsString("'=HYPERLINK", $content);
+        $this->assertStringContainsString("'+1", $content);
+        $this->assertStringContainsString("'@SUM(A1)", $content);
+        $this->assertStringContainsString("'-2+3", $content);
+        $this->assertStringContainsString('Nikon F3', $content);
+        $this->assertStringNotContainsString("'Nikon F3", $content);
+    }
+
+
+
+    #[Test]
+    public function getListSearchTreatsPercentLiterallyTest(): void
+    {
+        $this->actingAs($this->user);
+        $halfOff = Purchase::factory()->create(['user_id' => $this->user->id, 'transaction_date' => '2026-07-01', 'item_name' => '50%オフの品', 'features' => null, 'counterparty_name' => null]);
+        Purchase::factory()->create(['user_id' => $this->user->id, 'transaction_date' => '2026-07-02', 'item_name' => '500円の品', 'features' => null, 'counterparty_name' => null]);
+        Sale::factory()->create(['user_id' => $this->user->id, 'purchase_id' => $halfOff->id, 'sale_date' => '2026-07-10', 'counterparty_name' => null]);
+
+        // 「50%」は 500円の品には当たらない。受入1 + 払出1 = 2件
+        $response = $this->getLedger(['q' => '50%']);
+        $response->assertOk();
+        $response->assertInertiaProp('totalCount', 2);
     }
 }

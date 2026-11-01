@@ -14,7 +14,8 @@ return new class extends Migration
     {
         Schema::create('purchases', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            // 台帳は3年保存。利用者の行を物理削除しても仕入が道連れに消えないよう、記録が残っていれば削除できなくする
+            $table->foreignId('user_id')->constrained()->restrictOnDelete();
             $table->date('transaction_date')->comment('取引年月日（様式15号）');
             $table->tinyInteger('kubun')->default(1)->comment('区分（Kubun Enum）');
             // 品目は様式15号の必須項目だが、下書き（現場捕獲＝写真＋金額のみ）を許すため DB は nullable。

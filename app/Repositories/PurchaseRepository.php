@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Models\Purchase;
+use App\Support\LikePattern;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 
@@ -234,10 +235,12 @@ class PurchaseRepository implements PurchaseRepositoryInterface
 
         // 検索
         if ($q !== '') {
-            $query->where(function (Builder $sub) use ($q) {
-                $sub->where('item_name', 'like', "%{$q}%")
-                    ->orWhere('features', 'like', "%{$q}%")
-                    ->orWhere('counterparty_name', 'like', "%{$q}%");
+            // % と _ は「その文字そのもの」として探す（LikePattern）
+            $pattern = LikePattern::contains($q);
+            $query->where(function (Builder $sub) use ($pattern) {
+                $sub->whereRaw("item_name like ? escape '!'", [$pattern])
+                    ->orWhereRaw("features like ? escape '!'", [$pattern])
+                    ->orWhereRaw("counterparty_name like ? escape '!'", [$pattern]);
             });
         } else {
             // no action.
@@ -278,10 +281,12 @@ class PurchaseRepository implements PurchaseRepositoryInterface
         // 検索語（品目・特徴・相手方氏名の部分一致）
         $q = (string)($filterData['q'] ?? '');
         if ($q !== '') {
-            $query->where(function (Builder $sub) use ($q) {
-                $sub->where('item_name', 'like', "%{$q}%")
-                    ->orWhere('features', 'like', "%{$q}%")
-                    ->orWhere('counterparty_name', 'like', "%{$q}%");
+            // % と _ は「その文字そのもの」として探す（LikePattern）
+            $pattern = LikePattern::contains($q);
+            $query->where(function (Builder $sub) use ($pattern) {
+                $sub->whereRaw("item_name like ? escape '!'", [$pattern])
+                    ->orWhereRaw("features like ? escape '!'", [$pattern])
+                    ->orWhereRaw("counterparty_name like ? escape '!'", [$pattern]);
             });
         } else {
             // no action.
