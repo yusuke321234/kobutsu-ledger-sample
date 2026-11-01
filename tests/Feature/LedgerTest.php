@@ -32,7 +32,7 @@ class LedgerTest extends TestCase
 
 
     /**
-     * 台帳画面を取得する（画面と同じ camelCase のクエリ。ページングは既定値で埋める）
+     * 台帳画面を取得する（画面が送るのと同じ snake_case のクエリ。ページングは既定値で埋める）
      *
      * @param array $queryData
      * @return TestResponse

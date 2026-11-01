@@ -1,13 +1,2 @@
 parameters:
-	ignoreErrors:
-		-
-			message: '#^Call to an undefined method Illuminate\\Contracts\\Support\\MessageBag\:\:messages\(\)\.$#'
-			identifier: method.notFound
-			count: 1
-			path: app/Http/Middleware/LogValidationError.php
-
-		-
-			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Model\:\:\$price\.$#'
-			identifier: property.notFound
-			count: 1
-			path: app/Models/Sale.php
+	ignoreErrors: []

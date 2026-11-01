@@ -12,7 +12,7 @@
 | --- | --- |
 | **1. 法令の要件を、テーブルの構造とコードに落とし込む**<br>台帳を保存せず記録から毎回作る、在庫の状態を列で持たない、など | [設計の判断](#設計の判断) ・ [`app/Services/LedgerService.php`](app/Services/LedgerService.php) ・ [`database/migrations/`](database/migrations/) |
 | **2. AI に渡す開発規約と、守られたかを機械で確かめる仕組み**<br>実装の多くを生成 AI に任せる前提で、規約を文書にし、機械で確かめられるものはツールにした | [`AGENTS.md`](AGENTS.md) ・ [`docs/conventions/`](docs/conventions/) ・ [規約とその確かめ方](#規約とその確かめ方) |
-| **3. 動きをテストで固定してから変える**<br>画面は Vue 3 から React 19 へ移行済み。移行の前に E2E で画面の動きを固定した | [`tests/Feature/`](tests/Feature/)（PHPUnit 148本） ・ [`tests/e2e/`](tests/e2e/)（Playwright 40本） ・ [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+| **3. 動きをテストで固定してから変える**<br>画面は Vue 3 から React 19 へ移行済み。移行の前に E2E で画面の動きを固定した | [`tests/Feature/`](tests/Feature/)（PHPUnit 155本） ・ [`tests/e2e/`](tests/e2e/)（Playwright 40本） ・ [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
 
 ## 画面
 
@@ -93,14 +93,16 @@
 | 配列の値に条件式を書かない（先に `if` で変数を決める） | PHPStan の自作ルール | [`NoConditionInArrayValueRule`](tests/PHPStan/Rules/NoConditionInArrayValueRule.php) |
 | Repository で `count()` してから `first()` で取り直さない | PHPStan の自作ルール | [`NoCountThenFirstRule`](tests/PHPStan/Rules/NoCountThenFirstRule.php) |
 | アロー関数は `fn()`（空白なし）・キャストのあとに空白を入れない・メソッドのあいだは3行 | PHP_CodeSniffer（自作ルールを含む） | [`phpcs.xml`](phpcs.xml) ・ [`phpcs/Kobucho/`](phpcs/Kobucho/) |
-| PHP の型 | PHPStan + Larastan（レベル5） | [`phpstan.neon`](phpstan.neon) |
+| PHP の型 | PHPStan + Larastan（レベル5。既知の指摘を受け入れるベースラインは0件） | [`phpstan.neon`](phpstan.neon) |
 | 整形・一般的な Lint・TS の型 | Oxfmt・Oxlint（Vite+）・tsc | [`vite.config.ts`](vite.config.ts) |
 
 PHP の整形に Laravel Pint を使っていないのは、Pint の既定の書き方と、この規約（メソッドのあいだを3行空ける・`fn()` に空白を入れない、など）が合わないためです。規約に合わせた確認だけを PHP_CodeSniffer で行っています。
 
+コントローラを `// get` `// log` `// execute` `// return` で区切る、分岐ごとにどの枝に入ったかをログに残す、何もしない枝も `else { // no action. }` と書く、といった書き方も、この規約によるものです。障害のときに本番のログだけで処理の経路をたどれることを優先しています（[`03-coding-style.md`](docs/conventions/03-coding-style.md)）。Laravel の一般的な書き方より冗長なので、チームで開発するときは、そのチームの規約に合わせます。
+
 ## テスト
 
-- **PHPUnit（148本）**：Feature テストが中心です。画面に渡る props の形、他人のデータに触れないこと、台帳の行の並びと法定の記載事項、レート制限、ログの振り分けと相手方の個人情報がログに残らないことなどを確かめています
+- **PHPUnit（155本）**：Feature テストが中心です（DB を使わない小さな関数だけ Unit テスト）。画面に渡る props の形、他人のデータに触れないこと、台帳の行の並びと法定の記載事項、レート制限、ログの振り分けと相手方の個人情報がログに残らないことなどを確かめています
 - **Playwright（40本）**：実際のブラウザで、仕入の連続登録・下書き・売却と取消・台帳の絞り込みと PDF/CSV の出力・スマホの画面・セッション切れなどを通します。DB はファイルの SQLite、サーバーは `php -S` なので、外部サービスなしで動きます
 
 ### Vue から React への移行

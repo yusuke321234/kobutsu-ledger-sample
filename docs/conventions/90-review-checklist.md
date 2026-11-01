@@ -13,12 +13,12 @@
 |---|---|---|
 | 書き方の整形・一般的なバグのもと・型（TS） | Oxfmt・Oxlint・tsc | `npm run check` / `npm run types:check` |
 | 配列は `xxxList`・自分の関数に `on*` / `handle*` を付けない・型の名前は PascalCase で `Data` で終わらない・ファイル直下の定数は大文字（09） | ESLint（typescript-eslint の naming-convention。`eslint.config.ts`） | `npm run lint:naming` |
-| PHP の型の食い違い（既存の指摘は `phpstan-baseline.neon` に記録して受け入れ、新しいコードから厳しく見る） | PHPStan + Larastan（レベル5。`phpstan.neon`） | `composer phpstan` |
+| PHP の型の食い違い（ベースライン `phpstan-baseline.neon` は0件。指摘はコードを直して消す） | PHPStan + Larastan（レベル5。`phpstan.neon`） | `composer phpstan` |
 | 配列の値に条件式を書かない（03）・Repository で `count()` から `first()` を呼び直さない（07） | PHPStan の自作ルール（`tests/PHPStan/Rules/`） | `composer phpstan` |
 | `fn()`（空白なし）・キャストのあとに空白を入れない・メソッドのあいだは3行（03） | PHP_CodeSniffer と自作ルール（`phpcs.xml`・`phpcs/Kobucho/`） | `composer phpcs` |
 | サーバーの動き・画面の動き | PHPUnit・Playwright（E2E は CI の e2e ジョブ。フックには入れない） | `php artisan test` / `npm run e2e` |
 
-- 自作ルールの違反は `phpstan-baseline.neon` に入れず、コードを直す（ベースラインの作り直しは `composer phpstan:baseline`）。
+- PHPStan の指摘（自作ルールを含む）は `phpstan-baseline.neon` に入れず、コードを直す。ベースラインは、ライブラリの更新などで一度に多くの指摘が出たときに一時的に使うだけ（作り直しは `composer phpstan:baseline`）。
 - PHPCS の指摘は `vendor/bin/phpcbf` で自動修正できる。PHP の整形に Pint は使わない（手書きの規約が正。デフォルトのプリセットは規約と合わない）。
 
 ## レビューで確かめる規約（機械では線を引けないもの）

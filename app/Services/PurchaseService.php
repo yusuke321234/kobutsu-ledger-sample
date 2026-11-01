@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Contracts\Repositories\PurchaseRepositoryInterface;
 use App\Contracts\Services\PurchaseServiceInterface;
-use Illuminate\Support\Carbon;
+use App\Support\DateText;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -152,7 +152,7 @@ class PurchaseService implements PurchaseServiceInterface
             }
 
             // 売却済みの仕入日は、売却日より後にできない
-            $saleDate = $this->toDateString($saleData['sale_date']);
+            $saleDate = DateText::toDateString($saleData['sale_date']);
             if (strcmp((string)$updateData['transaction_date'], (string)$saleDate) <= 0) {
                 // ok.
             } else {
@@ -321,7 +321,7 @@ class PurchaseService implements PurchaseServiceInterface
         //
         $result = [
             'id' => (string)$purchaseData['id'],
-            'transaction_date' => $this->toDateString($purchaseData['transaction_date'] ?? null),
+            'transaction_date' => DateText::toDateString($purchaseData['transaction_date'] ?? null),
             'kubun' => (string)$purchaseData['kubun'],
             'item_name' => $purchaseData['item_name'],
             'quantity' => (int)$purchaseData['quantity'],
@@ -341,7 +341,7 @@ class PurchaseService implements PurchaseServiceInterface
             'sale_data' => $saleSummaryData,
             // 単品の素朴粗利（売価−仕入）
             'raw_gross_profit' => $this->rawGrossProfit($purchaseData, $saleData),
-            'created_at' => $this->toDateTimeString($purchaseData['created_at'] ?? null),
+            'created_at' => DateText::toDateTimeString($purchaseData['created_at'] ?? null),
         ];
         return $result;
     }
@@ -458,52 +458,10 @@ class PurchaseService implements PurchaseServiceInterface
         //
         $result = [
             'id' => (string)$saleData['id'],
-            'sale_date' => $this->toDateString($saleData['sale_date'] ?? null),
+            'sale_date' => DateText::toDateString($saleData['sale_date'] ?? null),
             'channel' => (string)$saleData['channel'],
             'sale_price' => (int)$saleData['sale_price'],
         ];
-        return $result;
-    }
-
-
-
-    /**
-     * 日付文字列を 'Y-m-d' に整形する（null はそのまま null）
-     *
-     * @param string|null $value
-     * @return string|null
-     */
-    private function toDateString(?string $value): ?string
-    {
-        $result = null;
-        if ($value !== null) {
-            $result = Carbon::parse($value)->toDateString();
-        } else {
-            // no action.
-        }
-
-        //
-        return $result;
-    }
-
-
-
-    /**
-     * 日時文字列を 'Y-m-d H:i:s' に整形する（null はそのまま null）
-     *
-     * @param string|null $value
-     * @return string|null
-     */
-    private function toDateTimeString(?string $value): ?string
-    {
-        $result = null;
-        if ($value !== null) {
-            $result = Carbon::parse($value)->toDateTimeString();
-        } else {
-            // no action.
-        }
-
-        //
         return $result;
     }
 }

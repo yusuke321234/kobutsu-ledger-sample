@@ -69,16 +69,4 @@ class Purchase extends Model
     {
         return $this->hasMany(PurchasePhoto::class);
     }
-
-
-
-    /**
-     * 在庫中か（売却されていない・下書きでない）
-     *
-     * @return bool
-     */
-    public function isInStock(): bool
-    {
-        return $this->sale === null && $this->is_draft === false;
-    }
 }
